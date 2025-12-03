@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
@@ -18,25 +19,27 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navDeepLink
 import com.plcoding.multiplebackstackscompose.ui.theme.MultipleBackstacksComposeTheme
+import kotlinx.serialization.Serializable
+import kotlin.reflect.KClass
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -49,9 +52,9 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
-                            items.forEach { item ->
-                                val isSelected = item.title.lowercase() ==
-                                        navBackStackEntry?.destination?.route
+                            BottomNavigationItem.entries.forEach { item ->
+                                val isSelected =
+                                        navBackStackEntry?.destination?.hasRoute(item.route) == true
                                 NavigationBarItem(
                                     selected = isSelected,
                                     label = {
@@ -66,7 +69,12 @@ class MainActivity : ComponentActivity() {
                                         )
                                     },
                                     onClick = {
-                                        rootNavController.navigate(item.title.lowercase()) {
+                                        val route = when (item) {
+                                            BottomNavigationItem.HOME -> HomeMain
+                                            BottomNavigationItem.CHAT -> ChatMain
+                                            BottomNavigationItem.SETTINGS -> SettingsMain
+                                        }
+                                        rootNavController.navigate(route) {
                                             popUpTo(rootNavController.graph.findStartDestination().id) {
                                                 saveState = true
                                             }
@@ -79,15 +87,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { padding ->
-                    NavHost(rootNavController, startDestination = "home") {
-                        composable("home") {
+                    NavHost(rootNavController, startDestination = HomeMain, Modifier.padding(padding)) {
+                        composable<HomeMain> {
                             HomeNavHost()
                         }
-                        composable("chat") {
+                        composable<ChatMain>(
+                            deepLinks = listOf(navDeepLink { uriPattern = "rpm://ChatMain" })
+                        ) {
                             ChatNavHost()
                         }
-                        composable("settings") {
-                            SettingsNavHost()
+                        composable<SettingsMain> {
+                            SettingsNavHost(navigateToDeepLink = { rootNavController.navigate(deepLink = "rpm://Chat2".toUri()) })
                         }
                     }
                 }
@@ -96,21 +106,61 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Serializable
+data object HomeMain
+@Serializable
+data object Home1
+@Serializable
+data object Home2
+@Serializable
+data object Home3
+
+@Serializable
+data object ChatMain
+@Serializable
+data object Chat1
+@Serializable
+data object Chat2
+@Serializable
+data object Chat3
+
+
+@Serializable
+data object SettingsMain
+@Serializable
+data object Settings1
+@Serializable
+data object Settings2
+@Serializable
+data object Settings3
+
 @Composable
 fun HomeNavHost() {
     val homeNavController = rememberNavController()
-    NavHost(homeNavController, startDestination = "home1") {
-        for(i in 1..10) {
-            composable("home$i") {
-                GenericScreen(
-                    text = "Home $i",
-                    onNextClick = {
-                        if(i < 10) {
-                            homeNavController.navigate("home${i + 1}")
-                        }
-                    }
-                )
-            }
+    NavHost(homeNavController, startDestination = Home1) {
+        composable<Home1> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    homeNavController.navigate(Home2)
+                }
+            )
+        }
+
+        composable<Home2> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    homeNavController.navigate(Home3)
+                }
+            )
+        }
+
+        composable<Home3> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = { }
+            )
         }
     }
 }
@@ -118,37 +168,61 @@ fun HomeNavHost() {
 @Composable
 fun ChatNavHost() {
     val chatNavController = rememberNavController()
-    NavHost(chatNavController, startDestination = "chat1") {
-        for(i in 1..10) {
-            composable("chat$i") {
-                GenericScreen(
-                    text = "Chat $i",
-                    onNextClick = {
-                        if(i < 10) {
-                            chatNavController.navigate("chat${i + 1}")
-                        }
-                    }
-                )
-            }
+    NavHost(chatNavController, startDestination = Chat1) {
+        composable<Chat1> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    chatNavController.navigate(Chat2)
+                }
+            )
+        }
+
+        composable<Chat2>(deepLinks = listOf(navDeepLink { uriPattern = "rpm://Chat2" })) {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    chatNavController.navigate(Chat3)
+                }
+            )
+        }
+
+        composable<Chat3> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = { }
+            )
         }
     }
 }
 
 @Composable
-fun SettingsNavHost() {
+fun SettingsNavHost(navigateToDeepLink: () -> Unit) {
     val settingsNavController = rememberNavController()
-    NavHost(settingsNavController, startDestination = "settings1") {
-        for(i in 1..10) {
-            composable("settings$i") {
-                GenericScreen(
-                    text = "Settings $i",
-                    onNextClick = {
-                        if(i < 10) {
-                            settingsNavController.navigate("settings${i + 1}")
-                        }
-                    }
-                )
-            }
+    NavHost(settingsNavController, startDestination = Settings1) {
+        composable<Settings1> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    settingsNavController.navigate(Settings2)
+                }
+            )
+        }
+
+        composable<Settings2> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = {
+                    settingsNavController.navigate(Settings3)
+                }
+            )
+        }
+
+        composable<Settings3> {
+            GenericScreen(
+                text = it.destination.route.toString(),
+                onNextClick = navigateToDeepLink
+            )
         }
     }
 }
@@ -172,26 +246,32 @@ fun GenericScreen(
     }
 }
 
-data class BottomNavigationItem(
+enum class BottomNavigationItem(
     val title: String,
+    val route: KClass<*>,
+    val baseRoute: KClass<*> = route,
     val unselectedIcon: ImageVector,
     val selectedIcon: ImageVector
-)
-
-val items = listOf(
-    BottomNavigationItem(
+) {
+    HOME(
         title = "Home",
+        route = HomeMain::class,
+        baseRoute = HomeMain::class,
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home,
     ),
-    BottomNavigationItem(
+    CHAT(
         title = "Chat",
+        route = ChatMain::class,
+        baseRoute = ChatMain::class,
         selectedIcon = Icons.Filled.Email,
         unselectedIcon = Icons.Outlined.Email,
     ),
-    BottomNavigationItem(
+    SETTINGS(
         title = "Settings",
+        route = SettingsMain::class,
+        baseRoute = SettingsMain::class,
         selectedIcon = Icons.Filled.Settings,
         unselectedIcon = Icons.Outlined.Settings,
     ),
-)
+}
