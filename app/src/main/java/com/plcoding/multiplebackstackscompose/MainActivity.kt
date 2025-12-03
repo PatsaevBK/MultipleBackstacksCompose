@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                             ChatNavHost()
                         }
                         composable<SettingsMain> {
-                            SettingsNavHost(navigateToDeepLink = { rootNavController.navigate(deepLink = "rpm://Chat2".toUri()) })
+                            SettingsNavHost(navigateToDeepLink = { rootNavController.navigate(deepLink = "rpm://ChatMain".toUri()) })
                         }
                     }
                 }
