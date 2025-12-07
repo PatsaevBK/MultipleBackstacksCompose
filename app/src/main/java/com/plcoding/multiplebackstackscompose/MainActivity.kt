@@ -1,13 +1,9 @@
 package com.plcoding.multiplebackstackscompose
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
@@ -16,7 +12,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -24,87 +19,168 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navDeepLink
+import com.plcoding.multiplebackstackscompose.ui.features.auth.AuthScreen
+import com.plcoding.multiplebackstackscompose.ui.navigation.DeepLinkRouter
+import com.plcoding.multiplebackstackscompose.ui.navigation.NavControllers
 import com.plcoding.multiplebackstackscompose.ui.theme.MultipleBackstacksComposeTheme
+import com.plcoding.multiplebackstackscompose.ui.widgets.GenericScreen
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.reflect.KClass
 
 class MainActivity : ComponentActivity() {
+
+    private val deepLinkFlow = MutableSharedFlow<Intent>()
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        println("XXX onCreate")
+
+        // если Activity стартовала с диплинком
+        intent?.data?.let {
+            lifecycleScope.launch { deepLinkFlow.emit(intent) }
+        }
+
         setContent {
             MultipleBackstacksComposeTheme {
-                val rootNavController = rememberNavController()
-                val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
-                Scaffold(
-                    bottomBar = {
-                        NavigationBar {
-                            BottomNavigationItem.entries.forEach { item ->
-                                val isSelected =
-                                        navBackStackEntry?.destination?.hasRoute(item.route) == true
-                                NavigationBarItem(
-                                    selected = isSelected,
-                                    label = {
-                                        Text(text = item.title)
-                                    },
-                                    icon = {
-                                        Icon(
-                                            imageVector = if(isSelected) {
-                                                item.selectedIcon
-                                            } else item.unselectedIcon,
-                                            contentDescription = item.title
-                                        )
-                                    },
-                                    onClick = {
-                                        val route = when (item) {
-                                            BottomNavigationItem.HOME -> HomeMain
-                                            BottomNavigationItem.CHAT -> ChatMain
-                                            BottomNavigationItem.SETTINGS -> SettingsMain
-                                        }
-                                        rootNavController.navigate(route) {
-                                            popUpTo(rootNavController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
+                AppRoot(deepLinkFlow)
+            }
+        }
+    }
+
+    @Composable
+    private fun AppRoot(deeplinkFlow: MutableSharedFlow<Intent>) {
+        // root nav (Auth -> App)
+        val rootNavController = rememberNavController()
+
+        // app level nav (tabs)
+        val appNavController = rememberNavController()
+
+        // вложенные nav controllers (hoisted)
+        val homeNavController = rememberNavController()
+        val chatNavController = rememberNavController()
+        val settingsNavController = rememberNavController()
+
+        val navControllers = remember(
+            rootNavController,
+            appNavController,
+            homeNavController,
+            chatNavController,
+            settingsNavController,
+        ) {
+            NavControllers(
+                root = rootNavController,
+                app = appNavController,
+                home = homeNavController,
+                chat = chatNavController,
+                settings = settingsNavController
+            )
+        }
+
+        LaunchedEffect(Unit) {
+            deepLinkFlow.collectLatest { DeepLinkRouter.handleDeepLink(it, navControllers) }
+        }
+
+        NavHost(navController = rootNavController, startDestination = Auth) {
+            composable<Auth> {
+                AuthScreen {
+                    rootNavController.navigate(route = App) {
+                        popUpTo<Auth> {
+                            inclusive = true
+                        }
+                    }
+                }
+            }
+
+            composable<App> {
+                AppScreen(navControllers)
+            }
+        }
+    }
+
+    @Composable
+    private fun AppScreen(
+        navControllers: NavControllers,
+    ) {
+//        val appNavController = rememberNavController()
+        val navBackStackEntry by navControllers.app.currentBackStackEntryAsState()
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    BottomNavigationItem.entries.forEach { item ->
+                        val isSelected =
+                            navBackStackEntry?.destination?.hasRoute(item.route) == true
+                        NavigationBarItem(
+                            selected = isSelected,
+                            label = {
+                                Text(text = item.title)
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = if (isSelected) {
+                                        item.selectedIcon
+                                    } else item.unselectedIcon,
+                                    contentDescription = item.title
                                 )
+                            },
+                            onClick = {
+                                val route = when (item) {
+                                    BottomNavigationItem.HOME -> HomeMain
+                                    BottomNavigationItem.CHAT -> ChatMain
+                                    BottomNavigationItem.SETTINGS -> SettingsMain
+                                }
+                                navControllers.app.navigate(route) {
+                                    popUpTo(navControllers.app.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
+                        )
                     }
-                ) { padding ->
-                    NavHost(rootNavController, startDestination = HomeMain, Modifier.padding(padding)) {
-                        composable<HomeMain> {
-                            HomeNavHost()
-                        }
-                        composable<ChatMain>(
-                            deepLinks = listOf(navDeepLink { uriPattern = "rpm://ChatMain" })
-                        ) {
-                            ChatNavHost()
-                        }
-                        composable<SettingsMain> {
-                            SettingsNavHost(navigateToDeepLink = { rootNavController.navigate(deepLink = "rpm://ChatMain".toUri()) })
-                        }
-                    }
+                }
+            }
+        ) { padding ->
+            NavHost(navControllers.app, startDestination = HomeMain, Modifier.padding(padding)) {
+                composable<HomeMain> {
+                    HomeNavHost(navControllers.home)
+                }
+                composable<ChatMain>(
+                    deepLinks = listOf(navDeepLink { uriPattern = "rpm://ChatMain" })
+                ) {
+                    ChatNavHost(navControllers.chat)
+                }
+                composable<SettingsMain> {
+                    SettingsNavHost(settingsNavController = navControllers.settings, navigateToDeepLink = { navControllers.app.navigate(deepLink = "rpm://ChatMain".toUri()) })
                 }
             }
         }
     }
 }
+
+@Serializable
+data object Auth
+@Serializable
+data object App
 
 @Serializable
 data object HomeMain
@@ -135,8 +211,9 @@ data object Settings2
 data object Settings3
 
 @Composable
-fun HomeNavHost() {
-    val homeNavController = rememberNavController()
+fun HomeNavHost(
+    homeNavController: NavHostController,
+) {
     NavHost(homeNavController, startDestination = Home1) {
         composable<Home1> {
             GenericScreen(
@@ -166,8 +243,9 @@ fun HomeNavHost() {
 }
 
 @Composable
-fun ChatNavHost() {
-    val chatNavController = rememberNavController()
+fun ChatNavHost(
+    chatNavController: NavHostController,
+) {
     NavHost(chatNavController, startDestination = Chat1) {
         composable<Chat1> {
             GenericScreen(
@@ -197,8 +275,10 @@ fun ChatNavHost() {
 }
 
 @Composable
-fun SettingsNavHost(navigateToDeepLink: () -> Unit) {
-    val settingsNavController = rememberNavController()
+fun SettingsNavHost(
+    settingsNavController: NavHostController,
+    navigateToDeepLink: () -> Unit
+) {
     NavHost(settingsNavController, startDestination = Settings1) {
         composable<Settings1> {
             GenericScreen(
@@ -223,25 +303,6 @@ fun SettingsNavHost(navigateToDeepLink: () -> Unit) {
                 text = it.destination.route.toString(),
                 onNextClick = navigateToDeepLink
             )
-        }
-    }
-}
-
-@Composable
-fun GenericScreen(
-    text: String,
-    onNextClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(text = text)
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = onNextClick) {
-            Text("Next")
         }
     }
 }
