@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -41,6 +42,7 @@ import com.plcoding.multiplebackstackscompose.ui.theme.MultipleBackstacksCompose
 import com.plcoding.multiplebackstackscompose.ui.widgets.GenericScreen
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.reflect.KClass
@@ -55,9 +57,9 @@ class MainActivity : ComponentActivity() {
         println("XXX onCreate")
 
         // если Activity стартовала с диплинком
-        intent?.data?.let {
-            lifecycleScope.launch { deepLinkFlow.emit(intent) }
-        }
+//        intent?.data?.let {
+//            lifecycleScope.launch { deepLinkFlow.emit(intent) }
+//        }
 
         setContent {
             MultipleBackstacksComposeTheme {
@@ -71,33 +73,33 @@ class MainActivity : ComponentActivity() {
         // root nav (Auth -> App)
         val rootNavController = rememberNavController()
 
-        // app level nav (tabs)
-        val appNavController = rememberNavController()
-
-        // вложенные nav controllers (hoisted)
-        val homeNavController = rememberNavController()
-        val chatNavController = rememberNavController()
-        val settingsNavController = rememberNavController()
-
-        val navControllers = remember(
-            rootNavController,
-            appNavController,
-            homeNavController,
-            chatNavController,
-            settingsNavController,
-        ) {
-            NavControllers(
-                root = rootNavController,
-                app = appNavController,
-                home = homeNavController,
-                chat = chatNavController,
-                settings = settingsNavController
-            )
-        }
-
-        LaunchedEffect(Unit) {
-            deepLinkFlow.collectLatest { DeepLinkRouter.handleDeepLink(it, navControllers) }
-        }
+//        // app level nav (tabs)
+//        val appNavController = rememberNavController()
+//
+//        // вложенные nav controllers (hoisted)
+//        val homeNavController = rememberNavController()
+//        val chatNavController = rememberNavController()
+//        val settingsNavController = rememberNavController()
+//
+//        val navControllers = remember(
+//            rootNavController,
+//            appNavController,
+//            homeNavController,
+//            chatNavController,
+//            settingsNavController,
+//        ) {
+//            NavControllers(
+//                root = rootNavController,
+//                app = appNavController,
+//                home = homeNavController,
+//                chat = chatNavController,
+//                settings = settingsNavController
+//            )
+//        }
+//
+//        LaunchedEffect(Unit) {
+//            deepLinkFlow.collectLatest { DeepLinkRouter.handleDeepLink(it, navControllers) }
+//        }
 
         NavHost(navController = rootNavController, startDestination = Auth) {
             composable<Auth> {
@@ -111,17 +113,19 @@ class MainActivity : ComponentActivity() {
             }
 
             composable<App> {
-                AppScreen(navControllers)
+                AppScreen()
             }
         }
     }
 
     @Composable
-    private fun AppScreen(
-        navControllers: NavControllers,
-    ) {
-//        val appNavController = rememberNavController()
-        val navBackStackEntry by navControllers.app.currentBackStackEntryAsState()
+    private fun AppScreen() {
+        val appNavController = rememberNavController()
+            val map =
+                appNavController.currentBackStack.collectAsState()
+            println("XXX appStack = ${map.value.map { it.destination.route.toString() }}")
+
+        val navBackStackEntry by appNavController.currentBackStackEntryAsState()
         Scaffold(
             bottomBar = {
                 NavigationBar {
@@ -142,13 +146,15 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onClick = {
+                                println("XXX click route = ${item.route}")
                                 val route = when (item) {
                                     BottomNavigationItem.HOME -> HomeMain
                                     BottomNavigationItem.CHAT -> ChatMain
                                     BottomNavigationItem.SETTINGS -> SettingsMain
                                 }
-                                navControllers.app.navigate(route) {
-                                    popUpTo(navControllers.app.graph.findStartDestination().id) {
+                                println("XXX startDest = ${appNavController.graph.findStartDestination()}")
+                                appNavController.navigate(route) {
+                                    popUpTo(appNavController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
                                     launchSingleTop = true
@@ -160,17 +166,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
         ) { padding ->
-            NavHost(navControllers.app, startDestination = HomeMain, Modifier.padding(padding)) {
+            NavHost(appNavController, startDestination = HomeMain, Modifier.padding(padding)) {
                 composable<HomeMain> {
-                    HomeNavHost(navControllers.home)
+                    HomeNavHost()
                 }
                 composable<ChatMain>(
                     deepLinks = listOf(navDeepLink { uriPattern = "rpm://ChatMain" })
                 ) {
-                    ChatNavHost(navControllers.chat)
+                    ChatNavHost()
                 }
-                composable<SettingsMain> {
-                    SettingsNavHost(settingsNavController = navControllers.settings, navigateToDeepLink = { navControllers.app.navigate(deepLink = "rpm://ChatMain".toUri()) })
+                composable<SettingsMain>(
+                    deepLinks = listOf(navDeepLink { uriPattern = "rpm://SettingsMain" })
+                ) {
+                    SettingsNavHost(navigateToDeepLink = { appNavController.navigate(deepLink = "rpm://ChatMain".toUri()) })
                 }
             }
         }
@@ -211,13 +219,12 @@ data object Settings2
 data object Settings3
 
 @Composable
-fun HomeNavHost(
-    homeNavController: NavHostController,
-) {
+fun HomeNavHost() {
+    val homeNavController = rememberNavController()
     NavHost(homeNavController, startDestination = Home1) {
         composable<Home1> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Home1.toString(),
                 onNextClick = {
                     homeNavController.navigate(Home2)
                 }
@@ -226,7 +233,7 @@ fun HomeNavHost(
 
         composable<Home2> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Home2.toString(),
                 onNextClick = {
                     homeNavController.navigate(Home3)
                 }
@@ -235,7 +242,7 @@ fun HomeNavHost(
 
         composable<Home3> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Home3.toString(),
                 onNextClick = { }
             )
         }
@@ -243,13 +250,12 @@ fun HomeNavHost(
 }
 
 @Composable
-fun ChatNavHost(
-    chatNavController: NavHostController,
-) {
+fun ChatNavHost() {
+    val chatNavController = rememberNavController()
     NavHost(chatNavController, startDestination = Chat1) {
         composable<Chat1> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Chat1.toString(),
                 onNextClick = {
                     chatNavController.navigate(Chat2)
                 }
@@ -258,7 +264,7 @@ fun ChatNavHost(
 
         composable<Chat2>(deepLinks = listOf(navDeepLink { uriPattern = "rpm://Chat2" })) {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Chat2.toString(),
                 onNextClick = {
                     chatNavController.navigate(Chat3)
                 }
@@ -267,7 +273,7 @@ fun ChatNavHost(
 
         composable<Chat3> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Chat3.toString(),
                 onNextClick = { }
             )
         }
@@ -276,13 +282,13 @@ fun ChatNavHost(
 
 @Composable
 fun SettingsNavHost(
-    settingsNavController: NavHostController,
     navigateToDeepLink: () -> Unit
 ) {
+    val settingsNavController = rememberNavController()
     NavHost(settingsNavController, startDestination = Settings1) {
         composable<Settings1> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Settings1.toString(),
                 onNextClick = {
                     settingsNavController.navigate(Settings2)
                 }
@@ -291,7 +297,7 @@ fun SettingsNavHost(
 
         composable<Settings2> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Settings2.toString(),
                 onNextClick = {
                     settingsNavController.navigate(Settings3)
                 }
@@ -300,7 +306,7 @@ fun SettingsNavHost(
 
         composable<Settings3> {
             GenericScreen(
-                text = it.destination.route.toString(),
+                text = Settings3.toString(),
                 onNextClick = navigateToDeepLink
             )
         }
